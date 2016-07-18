@@ -11,7 +11,8 @@ import time
 import timepad
 import os
 import traceback
-import urllib2
+import urllib3
+urllib3.disable_warnings()
 import itertools
 from datetime import datetime
 from pony.orm import db_session, select
@@ -19,28 +20,40 @@ from db import granumDB, Chat
 
 
 LAST_UPDATE_ID = None
-MESSAGE_START = "Вы подписаны на рассылку новостей.\nЯ буду присылать анонсы сюда и в канал @GranumSalis. Наберите /stop, чтобы остановить рассылку."
+MESSAGE_START = "Welcome to UBC English bot!"
 MESSAGE_STOP = "Я умолкаю в этом чате! Наберите /start, чтобы вновь подписаться на рассылку анонсов. Может быть, за анонсами удобнее следить в канале @GranumSalis?.."
-MESSAGE_HELP = "/flood - ссылка на флуд-чат\n/help - показать это сообщение\n/next - ближайшее мероприятие\n/promo - информация об акциях\n/start - подписаться на рассылку анонсов\n/stop - остановить рассылку анонсов\n/timing - расписание ближайшего мероприятия"
-KEYBOARD = '{"keyboard" : [["/start", "/flood", "/promo"], ["/next", "/timing", "/help"]], "resize_keyboard" : true}'
-KEYBOARD_ADMIN = '{"keyboard" : [["/start", "/flood", "/promo"], ["/next", "/timing", "/help"], ["/user_list", "/secret_list"]], "resize_keyboard" : true}'
-MESSAGE_HELP_ADMIN = MESSAGE_HELP + "\n/user_list - list of subscribers\n/secret_list - get participants list for next event\n/send_broad <message> - send message to all users\n/send <user_id> <message> - send <message> to <user_id>"
+MESSAGE_HELP = "/homework -- send homework\n/schedule -- send schedule\n/results -- send student's results\n/teacher -- chat with teacher\n/group_chat -- chat with groupmates\n/news -- send last news"
+MESSAGE_START = "{}\nUse commands:\n{}".format(MESSAGE_START, MESSAGE_HELP)
+KEYBOARD = '{"keyboard" : [["/homework", "/schedule", "/results"], ["/teacher", "/group_chat", "/news"]], "resize_keyboard" : true}'
+KEYBOARD_ADMIN = '{"keyboard" : [["/homework", "/schedule", "/results"], ["/teacher", "/group_chat", "/news"], ["/user_list", "/google_sheet"]], "resize_keyboard" : true}'
+MESSAGE_HELP_ADMIN = MESSAGE_HELP + "\n/user_list - list of user\n/google_sheet - get google sheed link\n/send_broad <message> - send message to all users\n/send <user_id> <message> - send <message> to <user_id>"
 MESSAGE_ALARM = "Аларм! Аларм!"
 CHAT_ID_ALARM = 79031498
 BOT_ID = 136777319
-FLOOD_CHAT_LINK = 'Чат для щепоточного флуда: https://telegram.me/granumsalisflood'
+GROUP_CHAT_LINK = 'Click to join group chat: https://telegram.me/joinchat/BLXsygbdA9k_4uWR1QvPNg'
 PROMO_MESSAGE = 'Человек, вот твой промокод: promo_{}_{}\n\nИспользуй его при заказе билета на любое из предстоящих мероприятий, чтобы получить скидку в 150 рублей (по отношению к самому дешевому билету). Срок действия промокода неограничен, но доступен он станет не сразу. Я оповещу тебя, когда он начнёт действовать.'
+NEWS_TEXT = "No news for now..."
+TEACHER_TEXT = "Your teacher: @AntonAfanasyev"
+RESULTS_TEXT = "You have no results for now"
+HOMEWORK_TEXT = "You have no homework for now"
+HOMEWORK_CMD = '/homework'
+SCHEDULE_CMD = '/schedule'
+RESULTS_CMD = '/results'
+GROOP_CHAT_CMD = '/groop_chat'
+TEACHER_CMD = '/teacher'
+NEWS_CMD = '/news'
 SEND_BROAD_CMD = '/send_broad'
 SEND_MSG_CMD = '/send'
 START_CMD = '/start'
 STOP_CMD = '/stop'
 SECRET_LIST_CMD = '/secret_list'
 USER_LIST_CMD = '/user_list'
+GOOGLE_SHEET_CMD = '/google_sheet'
+GOOGLE_SHEET = 'https://docs.google.com/spreadsheets/d/1HfJqGuRlTJB0yL3WRodMlRKX7kZoE7MyqLV6Wdk1AFE'
 HELLO_CMD = '/hello'
 HELP_CMD = '/help'
 NEXT_CMD = '/next'
-FLOOD_CMD = '/flood'
-TIMING_CMD = '/timing'
+GROUP_CHAT_CMD = '/group_chat'
 PROMO_CMD = '/promo'
 TELEGRAM_MSG_CHANNEL = '#telegram-messages'
 
@@ -50,7 +63,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Telegram bot for GranumSalis")
     parser.add_argument("--logfile", type=str, default='log', help="Path to log file")
-    parser.add_argument("--dbfile", type=str, default='granumsalis.sqlite', help="Path to sqlite DB file")
+    parser.add_argument("--dbfile", type=str, default='ubcenglish.sqlite', help="Path to sqlite DB file")
     args = parser.parse_args()
 
     granumDB.bind('sqlite', args.dbfile, create_db=True)
@@ -98,9 +111,9 @@ def log_update(update, logfile, slackbot, primary_id):
                                                         message.from_user.last_name,
                                                         message.from_user.name,
                                                         primary_id)
-    if message.left_chat_participant:
+    if message.left_chat_member:
         slack_text = slack_text.format('jeft bot chat')
-    elif message.new_chat_participant:
+    elif message.new_chat_member:
         slack_text = slack_text.format('joined bot chat')
     else:
         slack_text = slack_text.format(message.text)
@@ -127,11 +140,11 @@ def update_chat_db(message):
 
         if message.text == STOP_CMD:
             chat.silent_mode = True
-        elif message.left_chat_participant != None:
-            if message.left_chat_participant.id == BOT_ID:
+        elif message.left_chat_member != None:
+            if message.left_chat_member.id == BOT_ID:
                 chat.deleted = True
-        elif message.new_chat_participant != None:
-            if message.new_chat_participant.id == BOT_ID:
+        elif message.new_chat_member != None:
+            if message.new_chat_member.id == BOT_ID:
                 chat.deleted = False
         elif message.text == START_CMD:
             chat.silent_mode = False
@@ -212,8 +225,16 @@ def send_message(bot, message):
                 bot.sendMessage(chat_id=chat.chat_id, text=text)
 
 
-def get_timing_message():
-    CMD = "curl -s 'https://docs.google.com/spreadsheets/d/1eBh9w0WRRJleBQd7eVHFKBQgc5V_w0TYymMkKHL6598/export?format=tsv&id=1eBh9w0WRRJleBQd7eVHFKBQgc5V_w0TYymMkKHL6598&gid=1758330787' | sed -e 's/[[:space:]]$//g' | awk 'NF > 1 {print }'"
+def get_schedule_message():
+    DOC = "{}/export?format=tsv&id={}&gid={}".format(GOOGLE_SHEET, '1eBh9w0WRRJleBQd7eVHFKBQgc5V_w0TYymMkKHL6598', '1758330787')
+    CMD = "curl -s '{}' | sed -e 's/[[:space:]]$//g' | awk 'NF > 1 {{print }}'".format(DOC)
+    return os.popen(CMD).read()
+
+
+def get_news_message():
+    DOC = "{}/export?format=tsv&id={}&gid={}".format(GOOGLE_SHEET, '1eBh9w0WRRJleBQd7eVHFKBQgc5V_w0TYymMkKHL6598', '1907552920')
+    CMD = "curl -s '{}' | tail -1".format(DOC)
+    print(CMD)
     return os.popen(CMD).read()
 
 
@@ -228,7 +249,7 @@ def run(bot, admin_list, logfile, slackbot):
         if not silent_mode:
             reply_markup = reply_markup.replace(START_CMD, STOP_CMD)
     
-        if message.left_chat_participant:
+        if message.left_chat_member:
             pass
         elif message.text == HELP_CMD:
                 bot.sendMessage(chat_id=message.chat_id, \
@@ -247,17 +268,26 @@ def run(bot, admin_list, logfile, slackbot):
             timepad_token = open('.timepad_token').readline().strip()
             next_event_message=timepad.get_next_event(timepad_token)
             bot.sendMessage(chat_id=message.chat_id, text=next_event_message, reply_markup=reply_markup)
-        elif message.text == FLOOD_CMD:
-            bot.sendMessage(chat_id=message.chat_id, text=FLOOD_CHAT_LINK, reply_markup=reply_markup)
+        elif message.text == GROUP_CHAT_CMD:
+            bot.sendMessage(chat_id=message.chat_id, text=GROUP_CHAT_LINK, reply_markup=reply_markup)
+        elif message.text == NEWS_CMD:
+            news_message = get_news_message()
+            bot.sendMessage(chat_id=message.chat_id, text=news_message, reply_markup=reply_markup)
+        elif message.text == TEACHER_CMD:
+            bot.sendMessage(chat_id=message.chat_id, text=TEACHER_TEXT, reply_markup=reply_markup)
+        elif message.text == HOMEWORK_CMD:
+            bot.sendMessage(chat_id=message.chat_id, text=HOMEWORK_TEXT, reply_markup=reply_markup)
+        elif message.text == RESULTS_CMD:
+            bot.sendMessage(chat_id=message.chat_id, text=RESULTS_TEXT, reply_markup=reply_markup)
         elif message.text == PROMO_CMD:
             promo = PROMO_MESSAGE.format(message.from_user.username, primary_id)
             promo = 'Пока что никаких промоакций нет. Следите за анонсами мероприятий.'
             if primary_id > 209:
                 promo = 'Спасибо, что недавно добавились ко мне в друзья! Позвольте мне предоставить вам скидку на следующее (/next) мероприятие. Ваш промокод: promo_{}. Если что-то не работает, пишите прямо сюда.'.format(primary_id)
             bot.sendMessage(chat_id=message.chat_id, text=promo, reply_markup=reply_markup)
-        elif message.text.lower() == TIMING_CMD:
-            timing_message = get_timing_message()
-            bot.sendMessage(chat_id=message.chat_id, text=timing_message, reply_markup=reply_markup)
+        elif message.text.lower() == SCHEDULE_CMD:
+            schedule_message = get_schedule_message()
+            bot.sendMessage(chat_id=message.chat_id, text=schedule_message, reply_markup=reply_markup)
         elif is_admin and message.text.startswith(SEND_BROAD_CMD):
             send_broad(bot, message.text[len(SEND_BROAD_CMD) + 1:], admin_list)
         elif is_admin and message.text.startswith(SEND_MSG_CMD):
@@ -269,6 +299,8 @@ def run(bot, admin_list, logfile, slackbot):
             os.remove(timepad_list_filename)
         elif is_admin and message.text == USER_LIST_CMD:
             print_userlist(bot, message)
+        elif is_admin and message.text == GOOGLE_SHEET_CMD:
+            bot.sendMessage(chat_id=message.chat_id, text='Your google sheet: {}'.format(GOOGLE_SHEET), reply_markup=reply_markup)
         else:
             pass
             
