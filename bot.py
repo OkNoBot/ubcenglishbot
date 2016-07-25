@@ -20,26 +20,28 @@ from db import granumDB, Chat
 
 
 LAST_UPDATE_ID = None
-MESSAGE_START = "Welcome to UBC English bot!"
-MESSAGE_STOP = "Я умолкаю в этом чате! Наберите /start, чтобы вновь подписаться на рассылку анонсов. Может быть, за анонсами удобнее следить в канале @GranumSalis?.."
-MESSAGE_HELP = "/homework -- send homework\n/schedule -- send schedule\n/results -- send student's results\n/teacher -- chat with teacher\n/group_chat -- chat with groupmates\n/news -- send last news"
-MESSAGE_START = "{}\nUse commands:\n{}".format(MESSAGE_START, MESSAGE_HELP)
+MESSAGE_START = 'Добро пожаловать! Я бот UBC English. Пожалуйста, введите "I am ...", где "..." -- выданное Вам кодовое слово, чтобы я понял, из какой Вы группы.'
+MESSAGE_STOP = "Я умолкаю в этом чате! Наберите /start, чтобы вновь подписаться на рассылку анонсов."
+MESSAGE_HELP = "/homework -- прислать домашнее задание\n/schedule -- прислать расписание\n/results -- прислать результат тестирования\n/teacher -- чат с учителем\n/group_chat -- чат с одногруппниками\n/news -- прислать последние новости"
+MESSAGE_START = "{}\nДоступные команды:\n{}".format(MESSAGE_START, MESSAGE_HELP)
 KEYBOARD = '{"keyboard" : [["/homework", "/schedule", "/results"], ["/teacher", "/group_chat", "/news"]], "resize_keyboard" : true}'
 KEYBOARD_ADMIN = '{"keyboard" : [["/homework", "/schedule", "/results"], ["/teacher", "/group_chat", "/news"], ["/user_list", "/google_sheet"]], "resize_keyboard" : true}'
 MESSAGE_HELP_ADMIN = MESSAGE_HELP + "\n/user_list - list of user\n/google_sheet - get google sheed link\n/send_broad <message> - send message to all users\n/send <user_id> <message> - send <message> to <user_id>"
 MESSAGE_ALARM = "Аларм! Аларм!"
 CHAT_ID_ALARM = 79031498
 BOT_ID = 136777319
-GROUP_CHAT_LINK = 'Click to join group chat: https://telegram.me/joinchat/BLXsygbdA9k_4uWR1QvPNg'
+GROUP1_CHAT_LINK = 'Нажмите, чтобы добавиться в групповой чат: https://telegram.me/joinchat/BLXsyj9Qyw345JsKEVBFNQ'
+GROUP2_CHAT_LINK = 'Нажмите, чтобы добавиться в групповой чат: https://telegram.me/joinchat/BLXsyj95-Y2APYkG70_l7A'
 PROMO_MESSAGE = 'Человек, вот твой промокод: promo_{}_{}\n\nИспользуй его при заказе билета на любое из предстоящих мероприятий, чтобы получить скидку в 150 рублей (по отношению к самому дешевому билету). Срок действия промокода неограничен, но доступен он станет не сразу. Я оповещу тебя, когда он начнёт действовать.'
-NEWS_TEXT = "No news for now..."
-TEACHER_TEXT = "Your teacher: @AntonAfanasyev"
-RESULTS_TEXT = "You have no results for now"
-HOMEWORK_TEXT = "You have no homework for now"
+NEWS_TEXT = "Пока новостей нет..."
+TEACHER_TEXT = "Ваш учитель: @christina19"
+RESULTS_TEXT = "Пока результатов нет"
+HOMEWORK_TEXT = "Пока домашнего задания нет"
+REGISTER_TEXT = 'Пожалуйста, введите "I am ...", где "..." -- выданное Вам кодовое слово, чтобы я понял, из какой Вы группы.'
 HOMEWORK_CMD = '/homework'
 SCHEDULE_CMD = '/schedule'
 RESULTS_CMD = '/results'
-GROOP_CHAT_CMD = '/groop_chat'
+GROUP_CHAT_CMD = '/group_chat'
 TEACHER_CMD = '/teacher'
 NEWS_CMD = '/news'
 SEND_BROAD_CMD = '/send_broad'
@@ -55,6 +57,7 @@ HELP_CMD = '/help'
 NEXT_CMD = '/next'
 GROUP_CHAT_CMD = '/group_chat'
 PROMO_CMD = '/promo'
+IAM_CMD = "I am "
 TELEGRAM_MSG_CHANNEL = '#telegram-messages'
 
 
@@ -89,13 +92,13 @@ def main():
 
     while True:
         try:
-            run(bot, admin_ids, args.logfile, slackbot)
+            run(bot, args.logfile, slackbot)
         except telegram.TelegramError as error:
             print "TelegramError", error
             time.sleep(1)
-        except urllib2.URLError as error:
-            print "URLError", error
-            time.sleep(1)
+        #except urllib2.URLError as error:
+        #    print "URLError", error
+        #    time.sleep(1)
         except:
             traceback.print_exc()
             try:
@@ -112,7 +115,7 @@ def log_update(update, logfile, slackbot, primary_id):
                                                         message.from_user.name,
                                                         primary_id)
     if message.left_chat_member:
-        slack_text = slack_text.format('jeft bot chat')
+        slack_text = slack_text.format('left bot chat')
     elif message.new_chat_member:
         slack_text = slack_text.format('joined bot chat')
     else:
@@ -131,7 +134,7 @@ def update_chat_db(message):
             chat = Chat(chat_id=message.chat.id, user_id=message.from_user.id, open_date=datetime.now(), \
                             last_message_date=datetime.now(), username=message.from_user.username, \
                             first_name=message.from_user.first_name, last_name=message.from_user.last_name, \
-                            silent_mode=False, deleted=False)
+                            silent_mode=False, deleted=False, group_id="nobody")
         else:
             chat.last_message_date = datetime.now()
             chat.username = message.from_user.username
@@ -149,8 +152,20 @@ def update_chat_db(message):
         elif message.text == START_CMD:
             chat.silent_mode = False
             chat.deleted = False
+        elif message.text.startswith(IAM_CMD):
+            password = message.text[len(IAM_CMD):]
+            group_id = "nobody"
+            if password == "umbrella":
+                group_id = "group1"
+            if password == "butterfly":
+                group_id = "group2"
+            if password == "god":
+                group_id = "teacher"
+            if password == "boss":
+                group_id = "admin"
+            chat.group_id = group_id
 
-        return chat.primary_id, chat.silent_mode
+        return chat.primary_id, chat.silent_mode, chat.group_id
 
 
 def send_broad(bot, text, admin_list):
@@ -238,38 +253,57 @@ def get_news_message():
     return os.popen(CMD).read()
 
 
-def run(bot, admin_list, logfile, slackbot):
+def run(bot, logfile, slackbot):
     global LAST_UPDATE_ID
     for update in bot.getUpdates(offset=LAST_UPDATE_ID, timeout=10):
         message = update.message
-        primary_id, silent_mode = update_chat_db(message)
+        primary_id, silent_mode, group_id = update_chat_db(message)
         log_update(update, logfile, slackbot, primary_id)
-        is_admin = str(primary_id) in admin_list
-        reply_markup = KEYBOARD_ADMIN if is_admin else KEYBOARD
+
+        if group_id == "nobody":
+            bot.sendMessage(chat_id=message.chat_id, text=REGISTER_TEXT)
+            LAST_UPDATE_ID = update.update_id + 1
+            continue
+
+        is_admin = (group_id == "admin")
+        is_teacher = (group_id == 'teacher')
+        if is_teacher:
+            is_admin = is_teacher
+
+        reply_markup = KEYBOARD_ADMIN if (is_admin or is_teacher) else KEYBOARD
         if not silent_mode:
             reply_markup = reply_markup.replace(START_CMD, STOP_CMD)
-    
+
         if message.left_chat_member:
             pass
         elif message.text == HELP_CMD:
                 bot.sendMessage(chat_id=message.chat_id, \
                                 text=MESSAGE_HELP_ADMIN if is_admin else MESSAGE_HELP)
-        elif message.text == HELLO_CMD:
-            if message.from_user != None:
-                username = message.from_user.first_name + ' ' + message.from_user.last_name
-            else:
-                username = 'Anonymous'
-            bot.sendMessage(chat_id=message.chat_id, text=u'Hello, {}!'.format(username))
         elif message.text == START_CMD:
             bot.sendMessage(chat_id=message.chat_id, text=MESSAGE_START, reply_markup=reply_markup)
         elif message.text == STOP_CMD:
             bot.sendMessage(chat_id=message.chat_id, text=MESSAGE_STOP, reply_markup=reply_markup)
+        elif message.text.startswith(IAM_CMD):
+            if group_id == "admin":
+                bot.sendMessage(chat_id=message.chat_id, text="Вы администратор!", reply_markup=reply_markup)
+            elif group_id == "teacher":
+                bot.sendMessage(chat_id=message.chat_id, text="Вы учитель!", reply_markup=reply_markup)
+            elif group_id == "group1":
+                bot.sendMessage(chat_id=message.chat_id, text="Спасибо, вы в группе 1!", reply_markup=reply_markup)
+            elif group_id == "group2":
+                bot.sendMessage(chat_id=message.chat_id, text="Спасибо, вы в группе 2!", reply_markup=reply_markup)
         elif message.text == NEXT_CMD:
             timepad_token = open('.timepad_token').readline().strip()
             next_event_message=timepad.get_next_event(timepad_token)
             bot.sendMessage(chat_id=message.chat_id, text=next_event_message, reply_markup=reply_markup)
         elif message.text == GROUP_CHAT_CMD:
-            bot.sendMessage(chat_id=message.chat_id, text=GROUP_CHAT_LINK, reply_markup=reply_markup)
+            if group_id == 'group1':
+                bot.sendMessage(chat_id=message.chat_id, text=GROUP1_CHAT_LINK, reply_markup=reply_markup)
+            elif group_id == 'group2':
+                bot.sendMessage(chat_id=message.chat_id, text=GROUP2_CHAT_LINK, reply_markup=reply_markup)
+            elif group_id == 'admin' or group_id == 'teacher':
+                bot.sendMessage(chat_id=message.chat_id, text=GROUP1_CHAT_LINK, reply_markup=reply_markup)
+                bot.sendMessage(chat_id=message.chat_id, text=GROUP2_CHAT_LINK, reply_markup=reply_markup)
         elif message.text == NEWS_CMD:
             news_message = get_news_message()
             bot.sendMessage(chat_id=message.chat_id, text=news_message, reply_markup=reply_markup)
@@ -286,8 +320,13 @@ def run(bot, admin_list, logfile, slackbot):
                 promo = 'Спасибо, что недавно добавились ко мне в друзья! Позвольте мне предоставить вам скидку на следующее (/next) мероприятие. Ваш промокод: promo_{}. Если что-то не работает, пишите прямо сюда.'.format(primary_id)
             bot.sendMessage(chat_id=message.chat_id, text=promo, reply_markup=reply_markup)
         elif message.text.lower() == SCHEDULE_CMD:
-            schedule_message = get_schedule_message()
-            bot.sendMessage(chat_id=message.chat_id, text=schedule_message, reply_markup=reply_markup)
+            if group_id == "group1":
+                bot.sendMessage(chat_id=message.chat_id, text="Среда, с 18:00 до 19:30", reply_markup=reply_markup)
+            elif group_id == "group2":
+                bot.sendMessage(chat_id=message.chat_id, text="Среда, с 19:30 до 20:00", reply_markup=reply_markup)
+            else:
+                schedule_message = get_schedule_message()
+                bot.sendMessage(chat_id=message.chat_id, text=schedule_message, reply_markup=reply_markup)
         elif is_admin and message.text.startswith(SEND_BROAD_CMD):
             send_broad(bot, message.text[len(SEND_BROAD_CMD) + 1:], admin_list)
         elif is_admin and message.text.startswith(SEND_MSG_CMD):
