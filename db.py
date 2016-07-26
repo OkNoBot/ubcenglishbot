@@ -10,6 +10,7 @@ class Chat(granumDB.Entity):
     chat_id = Required(int, size=64, unique=True)
     user_id = Required(int)
     group_id = Optional(str)
+    state = Optional(str)
     open_date = Required(datetime)
     last_message_date = Optional(datetime)
     username = Optional(str)
