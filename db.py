@@ -23,6 +23,7 @@ class Chat(botDB.Entity):
     silent_mode = Required(bool)
     deleted = Required(bool)
     group_id = Optional(str)
+    realname = Optional(str)
 
     # State
-    state = Optional(str)
+    state = Required(str)

@@ -39,7 +39,7 @@ NEWS_TEXT = "Пока новостей нет..."
 TEACHER_TEXT = "Ваш учитель: @christina19"
 RESULTS_TEXT = "Пока результатов нет"
 HOMEWORK_TEXT = "Пока домашнего задания нет"
-REGISTER_TEXT = 'Пожалуйста, введите "I am ...", где "..." -- выданное Вам кодовое слово, чтобы я понял, из какой Вы группы.'
+REGISTER_TEXT = 'Пожалуйста, введите выданное Вам кодовое слово, чтобы я понял, из какой Вы группы:'
 HOMEWORK_CMD = '/homework'
 SCHEDULE_CMD = '/schedule'
 RESULTS_CMD = '/results'
@@ -59,7 +59,6 @@ HELP_CMD = '/help'
 NEXT_CMD = '/next'
 GROUP_CHAT_CMD = '/group_chat'
 PROMO_CMD = '/promo'
-IAM_CMD = "I am "
 TELEGRAM_MSG_CHANNEL = '#telegram-messages'
 
 
@@ -130,9 +129,10 @@ def update_chat_db(message):
         chat = Chat.get(chat_id=message.chat.id)
         if chat == None:
             chat = Chat(chat_id=message.chat.id, user_id=message.from_user.id, open_date=datetime.now(), \
-                            last_message_date=datetime.now(), username=message.from_user.username, \
-                            first_name=message.from_user.first_name, last_name=message.from_user.last_name, \
-                            silent_mode=False, deleted=False, group_id="nobody", state="MAIN_STATE")
+                        last_message_date=datetime.now(), username=message.from_user.username, \
+                        first_name=message.from_user.first_name, last_name=message.from_user.last_name, \
+                        silent_mode=False, deleted=False, group_id="nobody", state="REGISTER_STATE", \
+                        realname="")
         else:
             chat.last_message_date = datetime.now()
             chat.username = message.from_user.username
@@ -185,7 +185,7 @@ def print_userlist(bot, message):
     with db_session:
         chats_str = ''
         for chat in select(chat for chat in Chat):
-            chats_str += u'{}. {} {} (@{}, {})'.format(chat.primary_id, chat.first_name, chat.last_name, \
+            chats_str += u'{}. {} (@{}, {})'.format(chat.primary_id, chat.realname, \
                                                      chat.username, chat.group_id)
             if chat.silent_mode:
                 chats_str += ' (silent mode)'
@@ -201,8 +201,8 @@ def print_userlist(bot, message):
 
         group1_str = 'Group 1:\n'
         for chat in select(chat for chat in Chat if chat.group_id == "group1"):
-            group1_str += u'{}. {} {} (@{})'.format(chat.primary_id, chat.first_name, chat.last_name, \
-                                                     chat.username)
+            group1_str += u'{}. {} (@{})'.format(chat.primary_id, chat.realname, chat.username)
+
             if chat.silent_mode:
                 group1_str += ' (silent mode)'
             if chat.deleted:
@@ -217,8 +217,8 @@ def print_userlist(bot, message):
 
         group2_str = 'Group 2:\n'
         for chat in select(chat for chat in Chat if chat.group_id == "group2"):
-            group2_str += u'{}. {} {} (@{})'.format(chat.primary_id, chat.first_name, chat.last_name, \
-                                                     chat.username)
+            group2_str += u'{}. {} (@{})'.format(chat.primary_id, chat.realname, chat.username)
+
             if chat.silent_mode:
                 group2_str += ' (silent mode)'
             if chat.deleted:
@@ -279,8 +279,8 @@ def run(bot, logfile, slackbot):
         message = update.message
 
         chat = update_chat_db(message)
-        primary_id, group_id, state, silent_mode, deleted = \
-            chat.primary_id, chat.group_id, chat.state, chat.silent_mode, chat.deleted
+        primary_id, group_id, state, silent_mode, deleted, realname = \
+            chat.primary_id, chat.group_id, chat.state, chat.silent_mode, chat.deleted, chat.realname
 
         log_update(update, logfile, slackbot, primary_id)
 
@@ -288,24 +288,46 @@ def run(bot, logfile, slackbot):
 
         reply_markup = MAIN_KEYBOARD_ADMIN if ((group_id == "admin") or (group_id == 'teacher')) else MAIN_KEYBOARD
 
-        print("State: {}. Message: {}".format(state, message.text))
+        print(u"State: {}. Message: {}".format(state, message.text))
 
-        if group_id == "nobody":
-            bot.sendMessage(chat_id=message.chat_id, text=REGISTER_TEXT)
+        if state.startswith("REGISTER_STATE"):
+            if len(state.split()) == 1:
+                reply_markup = '{"keyboard" : [["/confirm"]], "resize_keyboard" : true, "one_time_keyboard" : true}'
+                realname = u"{} {}".format(message.from_user.first_name, message.from_user.last_name)
+                text = u"Ваше имя и фамилия в Телеграме: {}. Подтвердите его (/confirm) или введите Вашe имя и фамилию для использования в этом боте:".format(realname)
+                bot.sendMessage(chat_id=message.chat_id, text=text, reply_markup=reply_markup)
+                state = "REGISTER_STATE password"
+            elif len(state.split()) == 2:
+                if message.text != "/confirm":
+                    realname = message.text
+                bot.sendMessage(chat_id=message.chat_id, text=u"Ваше имя: {}".format(realname), reply_markup=telegram.ReplyKeyboardHide())
 
-        elif state == "MAIN_STATE":
-            if message.text.startswith(IAM_CMD):
-                password = message.text[len(IAM_CMD):]
-                group_id = "nobody"
+                bot.sendMessage(chat_id=message.chat_id, text=REGISTER_TEXT)
+                state = "REGISTER_STATE password realname"
+            elif len(state.split()) == 3:
+                password = message.text
                 if password == "umbrella":
                     group_id = "group1"
-                if password == "butterfly":
+                    bot.sendMessage(chat_id=message.chat_id, text="Спасибо, вы в группе 1!", reply_markup=MAIN_KEYBOARD)
+                    state = "MAIN_STATE"
+                elif password == "butterfly":
                     group_id = "group2"
-                if password == "god":
+                    bot.sendMessage(chat_id=message.chat_id, text="Спасибо, вы в группе 2!", reply_markup=MAIN_KEYBOARD)
+                    state = "MAIN_STATE"
+                elif password == "god":
                     group_id = "teacher"
-                if password == "boss":
+                    bot.sendMessage(chat_id=message.chat_id, text="Вы учитель!", reply_markup=MAIN_KEYBOARD_ADMIN)
+                    state = "MAIN_STATE"
+                elif password == "boss":
                     group_id = "admin"
-            elif message.left_chat_member != None:
+                    bot.sendMessage(chat_id=message.chat_id, text="Вы администратор!", reply_markup=MAIN_KEYBOARD_ADMIN)
+                    state = "MAIN_STATE"
+                else:
+                    bot.sendMessage(chat_id=message.chat_id, text="Кодовое слово мне неизвестно :(")
+                    bot.sendMessage(chat_id=message.chat_id, text=REGISTER_TEXT)
+
+        elif state == "MAIN_STATE":
+            if message.left_chat_member != None:
                 if message.left_chat_member.id == BOT_ID:
                     deleted = True
             elif message.new_chat_member != None:
@@ -321,15 +343,6 @@ def run(bot, logfile, slackbot):
             elif message.text == STOP_CMD:
                 silent_mode = True
                 bot.sendMessage(chat_id=message.chat_id, text=MESSAGE_STOP, reply_markup=reply_markup)
-            elif message.text.startswith(IAM_CMD):
-                if group_id == "admin":
-                    bot.sendMessage(chat_id=message.chat_id, text="Вы администратор!", reply_markup=reply_markup)
-                elif group_id == "teacher":
-                    bot.sendMessage(chat_id=message.chat_id, text="Вы учитель!", reply_markup=reply_markup)
-                elif group_id == "group1":
-                    bot.sendMessage(chat_id=message.chat_id, text="Спасибо, вы в группе 1!", reply_markup=reply_markup)
-                elif group_id == "group2":
-                    bot.sendMessage(chat_id=message.chat_id, text="Спасибо, вы в группе 2!", reply_markup=reply_markup)
             elif message.text == GROUP_CHAT_CMD:
                 if group_id == 'group1':
                     bot.sendMessage(chat_id=message.chat_id, text=GROUP1_CHAT_LINK, reply_markup=reply_markup)
@@ -368,7 +381,7 @@ def run(bot, logfile, slackbot):
                 pass
 
         elif state.startswith("SEND_STATE"):
-            if message.text == "/cancel": #state.endswith("cancel"):
+            if message.text == "/cancel":
                 bot.sendMessage(chat_id=message.chat_id, text="Рассылка отменена", reply_markup=reply_markup)
                 state = "MAIN_STATE"
             elif len(state.split()) == 1:
