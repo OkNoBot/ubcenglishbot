@@ -8,7 +8,6 @@ from pyslack import SlackClient
 import json
 import argparse
 import time
-import timepad
 import os
 import traceback
 import certifi
