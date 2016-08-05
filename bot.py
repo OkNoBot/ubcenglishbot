@@ -11,8 +11,8 @@ import time
 import timepad
 import os
 import traceback
+import certifi
 import urllib3
-urllib3.disable_warnings()
 import itertools
 from datetime import datetime
 from pony.orm import db_session, select
@@ -76,6 +76,8 @@ def main():
 
     # TODO: use it
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    http = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
 
     telegram_token = open('.telegram_token').readline().strip()
     slack_token = open('.slack_token').readline().strip()

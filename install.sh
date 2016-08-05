@@ -2,7 +2,7 @@
 
 VENV_DIR=venv
 PIP=$VENV_DIR/bin/pip
-PIP_PACKAGES="requests pony parse pdfkit pyslack-real python-telegram-bot"
+PIP_PACKAGES="requests pony parse pdfkit pyslack-real python-telegram-bot urllib3 certifi"
 
 sudo apt install python-pip python-virtualenv
 sudo apt-get --reinstall install python-pyasn1 python-pyasn1-modules
