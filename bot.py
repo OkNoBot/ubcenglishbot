@@ -430,8 +430,8 @@ def run(bot, logfile, slackbot):
 
         with db_session:
             chat = Chat.get(chat_id=message.chat.id)
-            chat.group_id, chat.state, chat.silent_mode, chat.deleted = \
-                group_id, state, silent_mode, deleted
+            chat.primary_id, chat.group_id, chat.state, chat.silent_mode, chat.deleted, chat.realname = \
+                primary_id, group_id, state, silent_mode, deleted, realname
 
         LAST_UPDATE_ID = update.update_id + 1
 
