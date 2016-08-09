@@ -108,7 +108,7 @@ def main():
 
 def log_update(update, logfile, slackbot, primary_id):
     message = update.message
-    slack_text = u'{} {} ({}, GSid: {}): {{}}\n'.format(message.from_user.first_name,
+    slack_text = u'UBC English. {} {} ({}, GSid: {}): {{}}\n'.format(message.from_user.first_name,
                                                         message.from_user.last_name,
                                                         message.from_user.name,
                                                         primary_id)
@@ -133,7 +133,7 @@ def update_chat_db(message):
                         last_message_date=datetime.now(), username=message.from_user.username, \
                         first_name=message.from_user.first_name, last_name=message.from_user.last_name, \
                         silent_mode=False, deleted=False, group_id="nobody", state="REGISTER_STATE", \
-                        realname="")
+                        realname="", news="", homework="")
         else:
             chat.last_message_date = datetime.now()
             chat.username = message.from_user.username
@@ -155,7 +155,7 @@ def send_broad(bot, text, group):
                 print "TelegramError", error
 
 
-def forward_broad(bot, from_chat_id, message_id, group):
+def forward_broad(bot, from_chat_id, message_id, group, ty):
     with db_session:
         for chat in select(chat for chat in Chat if not (chat.silent_mode or chat.deleted) and \
                            (chat.group_id == group or group == "all")):
@@ -164,6 +164,10 @@ def forward_broad(bot, from_chat_id, message_id, group):
                 #reply_markup = MAIN_KEYBOARD_ADMIN if is_admin else MAIN_KEYBOARD
                 #bot.sendMessage(chat_id=chat.chat_id, text=text)#, reply_markup=reply_markup)
                 bot.forwardMessage(chat_id=chat.chat_id, from_chat_id=from_chat_id, message_id=message_id)
+                if ty == 'news':
+                    chat.news = '{} {}'.format(from_chat_id, message_id)
+                elif ty == 'homework':
+                    chat.homework = '{} {}'.format(from_chat_id, message_id)
             except telegram.TelegramError as error:
                 print "TelegramError", error
 
@@ -280,8 +284,8 @@ def run(bot, logfile, slackbot):
         message = update.message
 
         chat = update_chat_db(message)
-        primary_id, group_id, state, silent_mode, deleted, realname = \
-            chat.primary_id, chat.group_id, chat.state, chat.silent_mode, chat.deleted, chat.realname
+        primary_id, group_id, state, silent_mode, deleted, realname, news, homework = \
+            chat.primary_id, chat.group_id, chat.state, chat.silent_mode, chat.deleted, chat.realname, chat.news, chat.homework
 
         log_update(update, logfile, slackbot, primary_id)
 
@@ -353,13 +357,19 @@ def run(bot, logfile, slackbot):
                     bot.sendMessage(chat_id=message.chat_id, text=GROUP1_CHAT_LINK, reply_markup=reply_markup)
                     bot.sendMessage(chat_id=message.chat_id, text=GROUP2_CHAT_LINK, reply_markup=reply_markup)
             elif message.text == NEWS_CMD:
-                #news_message = get_news_message()
-                #bot.sendMessage(chat_id=message.chat_id, text=news_message, reply_markup=reply_markup)
-                bot.forwardMessage(chat_id=message.chat_id, from_chat_id=237288447, message_id=1468)
+                if news == "":
+                    bot.sendMessage(chat_id=message.chat_id, text="Пока новостей нет...", reply_markup=reply_markup)
+                else:
+                    from_chat_id, message_id = map(int, news.split())
+                    bot.forwardMessage(chat_id=message.chat_id, from_chat_id=from_chat_id, message_id=message_id)
             elif message.text == TEACHER_CMD:
                 bot.sendMessage(chat_id=message.chat_id, text=TEACHER_TEXT, reply_markup=reply_markup)
             elif message.text == HOMEWORK_CMD:
-                bot.sendMessage(chat_id=message.chat_id, text=HOMEWORK_TEXT, reply_markup=reply_markup)
+                if homework == "":
+                    bot.sendMessage(chat_id=message.chat_id, text="Домашнего задания нет", reply_markup=reply_markup)
+                else:
+                    from_chat_id, message_id = map(int, homework.split())
+                    bot.forwardMessage(chat_id=message.chat_id, from_chat_id=from_chat_id, message_id=message_id)
             elif message.text == RESULTS_CMD:
                 bot.sendMessage(chat_id=message.chat_id, text=RESULTS_TEXT, reply_markup=reply_markup)
             elif message.text.lower() == SCHEDULE_CMD:
@@ -419,8 +429,12 @@ def run(bot, logfile, slackbot):
                 bot.sendMessage(chat_id=message.chat_id, text="Подтвердите отправку (/confirm):", reply_markup=reply_markup)
             elif len(state.split()) == 4:
                 if message.text == "/confirm":
-                    _, _, group, message_id = state.split()
-                    forward_broad(bot, from_chat_id=message.chat_id, message_id=message_id, group=group)
+                    _, ty, group, message_id = state.split()
+                    forward_broad(bot, from_chat_id=message.chat_id, message_id=message_id, group=group, ty=ty)
+                    # Update local news, homework after broadcasting
+                    with db_session:
+                        chat = Chat.get(chat_id=message.chat.id)
+                        news, homework = chat.news, chat.homework
                     bot.sendMessage(chat_id=message.chat_id, text="Отправлено!", reply_markup=reply_markup)
                     state = "MAIN_STATE"
                 else:
@@ -430,8 +444,8 @@ def run(bot, logfile, slackbot):
 
         with db_session:
             chat = Chat.get(chat_id=message.chat.id)
-            chat.primary_id, chat.group_id, chat.state, chat.silent_mode, chat.deleted, chat.realname = \
-                primary_id, group_id, state, silent_mode, deleted, realname
+            chat.primary_id, chat.group_id, chat.state, chat.silent_mode, chat.deleted, chat.realname, chat.news, chat.homework = \
+                primary_id, group_id, state, silent_mode, deleted, realname, news, homework
 
         LAST_UPDATE_ID = update.update_id + 1
 
